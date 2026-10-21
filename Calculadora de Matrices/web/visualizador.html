@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizador 3D - Calculadora de matrices</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root { color-scheme: dark; font-family: Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; overflow: hidden; color: #f3f6f4; background: #111820; }
+    canvas { display: block; }
+    .toolbar { position: fixed; z-index: 1; top: 16px; left: 16px; width: min(390px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: rgba(15, 24, 31, 0.92); border: 1px solid #33464b; border-radius: 8px; }
+    .toolbar-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    h1 { margin: 0; font-size: 1.25rem; }
+    h2 { margin: 20px 0 10px; font-size: 1rem; }
+    p { color: #b6c6c4; font-size: 0.9rem; line-height: 1.45; }
+    a, button { color: #fff; }
+    a { font-size: 0.85rem; }
+    button { min-height: 38px; padding: 9px 12px; border: 0; border-radius: 4px; background: #2f7775; cursor: pointer; font-weight: 700; }
+    button:hover { background: #3a918d; }
+    button.secondary { background: #39484f; }
+    label { display: grid; gap: 5px; color: #b6c6c4; font-size: 0.8rem; }
+    input, select { width: 100%; min-height: 36px; padding: 7px; color: #f3f6f4; background: #1d2a31; border: 1px solid #45585e; border-radius: 4px; }
+    .status { min-height: 18px; margin: 12px 0 0; font-size: 0.84rem; }
+    .status.error { color: #ff9286; }
+    .status.ok { color: #67e6ae; }
+    .point-count { margin: 5px 0; }
+    .matrix-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+    .transform-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .animation-toggle { display: flex; grid-column: 1 / -1; align-items: center; gap: 8px; margin-top: 12px; }
+    .animation-toggle input { width: auto; min-height: auto; }
+    @media (max-width: 520px) {
+      .toolbar { top: 8px; left: 8px; width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="toolbar">
+    <div class="toolbar-head">
+      <h1>Visualizador 3D</h1>
+      <a href="/">Volver a la calculadora</a>
+    </div>
+    <p class="point-count">Puntos cargados desde CSV: <strong id="point-count">0</strong></p>
+    <p id="ws-status" class="status">Conectando con la API...</p>
+
+    <h2>Matriz guardada 4 x 4</h2>
+    <p>Se muestran todas las matrices guardadas; solo las de 4 x 4 se pueden aplicar al torus.</p>
+    <div class="matrix-row">
+      <label for="saved-matrix">Matriz
+        <select id="saved-matrix">
+          <option value="">Cargando matrices...</option>
+        </select>
+      </label>
+      <button id="apply-matrix" type="button">Aplicar</button>
+    </div>
+    <button id="refresh-matrices" class="secondary" type="button" style="margin-top: 8px">Actualizar lista</button>
+
+    <h2>Transformacion</h2>
+    <div class="transform-grid">
+      <label>Traslacion X<input data-parameter="tx" type="number" step="0.1" value="0"></label>
+      <label>Traslacion Y<input data-parameter="ty" type="number" step="0.1" value="0"></label>
+      <label>Traslacion Z<input data-parameter="tz" type="number" step="0.1" value="0"></label>
+      <label>Rotacion X<input data-parameter="rx" type="number" step="1" value="0"></label>
+      <label>Rotacion Y<input data-parameter="ry" type="number" step="1" value="0"></label>
+      <label>Rotacion Z<input data-parameter="rz" type="number" step="1" value="0"></label>
+      <button id="apply-parameters" type="button">Aplicar parametros</button>
+      <label class="animation-toggle"><input id="animate" type="checkbox" checked> Animacion continua</label>
+    </div>
+  </aside>
+
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111820);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 35);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const modelGroup = new THREE.Group();
+    modelGroup.matrixAutoUpdate = false;
+    scene.add(modelGroup);
+
+    const status = document.getElementById('ws-status');
+    const savedMatrixSelect = document.getElementById('saved-matrix');
+    const animateToggle = document.getElementById('animate');
+    const identityMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    let baseMatrix = [...identityMatrix];
+    let appliedMatrixId = null;
+    let transformGeneration = 0;
+    let transformRequestId = 0;
+    let animationRequestPending = false;
+    let pendingBaseTransform = false;
+    let lastAnimationSentAt = 0;
+    let angle = 0;
+    let ws;
+    let reconnectTimer;
+    const lastAppliedMatrixId = localStorage.getItem('torusMatrixId');
+    const pendingTransforms = new Map();
+
+    function showStatus(message, isError = false) {
+      status.textContent = message;
+      status.className = `status ${isError ? 'error' : 'ok'}`;
+    }
+
+    async function loadModel() {
+      const response = await fetch('/api/modelo-csv');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'No se pudo cargar el modelo.');
+
+      document.getElementById('point-count').textContent = data.total_puntos;
+      if (!Array.isArray(data.vertices) || data.vertices.length === 0) {
+        throw new Error('El archivo CSV no contiene vertices para mostrar.');
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices.flat(), 3));
+      modelGroup.add(new THREE.Points(geometry, new THREE.PointsMaterial({color: 0x00ff88, size: 0.08})));
+      geometry.computeBoundingSphere();
+      if (geometry.boundingSphere) {
+        camera.position.z = Math.max(35, geometry.boundingSphere.radius * 2.5);
+      }
+    }
+
+    async function loadSavedMatrices() {
+      const selectedId = savedMatrixSelect.value || localStorage.getItem('torusMatrixId') || '';
+      savedMatrixSelect.replaceChildren(new Option('Selecciona una matriz 4 x 4', ''));
+      try {
+        const response = await fetch('/matrices');
+        const matrices = await response.json();
+        if (!response.ok) throw new Error(matrices.detail || 'No se pudo cargar la lista.');
+        matrices.forEach(matrix => {
+          const compatible = Array.isArray(matrix.datos) &&
+            matrix.datos.length === 4 &&
+            matrix.datos.every(row => Array.isArray(row) && row.length === 4);
+          const rows = Array.isArray(matrix.datos) ? matrix.datos.length : 0;
+          const columns = rows > 0 && Array.isArray(matrix.datos[0]) ? matrix.datos[0].length : 0;
+          const option = new Option(
+            `${matrix.nombre} · ID ${matrix.id} · ${rows} x ${columns}${compatible ? '' : ' (requiere 4 x 4)'}`,
+            matrix.id
+          );
+          option.disabled = !compatible;
+          savedMatrixSelect.add(option);
+        });
+        if (!matrices.length) {
+          savedMatrixSelect.options[0].textContent = 'No hay matrices guardadas';
+        }
+        if (selectedId && [...savedMatrixSelect.options].some(option => option.value === selectedId && !option.disabled)) {
+          savedMatrixSelect.value = selectedId;
+        }
+      } catch (error) {
+        savedMatrixSelect.options[0].textContent = 'Error al cargar matrices';
+        showStatus(error.message, true);
+      }
+    }
+
+    function connectWebSocket() {
+      clearTimeout(reconnectTimer);
+      const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${scheme}//${window.location.host}/ws/transform`);
+      ws.onopen = () => {
+        clearTimeout(reconnectTimer);
+        showStatus('Conectado al servicio de transformaciones.');
+      };
+      ws.onerror = () => showStatus('Error de conexion WebSocket.', true);
+      ws.onclose = () => {
+        pendingTransforms.clear();
+        animationRequestPending = false;
+        pendingBaseTransform = false;
+        showStatus('Conexion WebSocket cerrada; reintentando...', true);
+        reconnectTimer = setTimeout(connectWebSocket, 2000);
+      };
+      ws.onmessage = event => {
+        const data = JSON.parse(event.data);
+        const request = pendingTransforms.get(data.request_id);
+        pendingTransforms.delete(data.request_id);
+        if (request?.kind === 'animation') animationRequestPending = false;
+        if (!request || request.generation !== transformGeneration) return;
+        if (data.status === 'error') {
+          if (request.kind === 'base') pendingBaseTransform = false;
+          showStatus(data.detail || 'Parametros de transformacion invalidos.', true);
+        } else if (data.matrix) {
+          if (request.kind === 'base') {
+            baseMatrix = data.matrix;
+            pendingBaseTransform = false;
+          }
+          modelGroup.matrix.fromArray(data.matrix);
+        }
+      };
+    }
+
+    function readParameters() {
+      return Object.fromEntries(
+        [...document.querySelectorAll('[data-parameter]')].map(input => [
+          input.dataset.parameter,
+          Number(input.value)
+        ])
+      );
+    }
+
+    function sendTransform(parameters, kind) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const requestId = ++transformRequestId;
+        const request = {kind, generation: transformGeneration};
+        const payload = {
+          ...parameters,
+          request_id: requestId,
+          generation: transformGeneration,
+        };
+        if (kind === 'animation') payload.base_matrix = baseMatrix;
+        pendingTransforms.set(requestId, request);
+        try {
+          ws.send(JSON.stringify(payload));
+          return true;
+        } catch (error) {
+          pendingTransforms.delete(requestId);
+          showStatus(error.message, true);
+        }
+      }
+      return false;
+    }
+
+    document.getElementById('apply-parameters').addEventListener('click', () => {
+      animateToggle.checked = false;
+      transformGeneration += 1;
+      pendingBaseTransform = true;
+      if (!sendTransform(readParameters(), 'base')) {
+        pendingBaseTransform = false;
+        showStatus('No hay conexion con el servicio de transformaciones.', true);
+      }
+    });
+
+    animateToggle.addEventListener('change', () => {
+      transformGeneration += 1;
+      if (!animateToggle.checked) {
+        modelGroup.matrix.fromArray(baseMatrix);
+        showStatus('Animacion pausada; se conserva la transformacion aplicada.');
+      }
+    });
+
+    document.getElementById('apply-matrix').addEventListener('click', async () => {
+      await applySavedMatrix(savedMatrixSelect.value);
+    });
+
+    async function applySavedMatrix(id) {
+      if (!id) return showStatus('Selecciona una matriz guardada de 4 x 4.', true);
+      try {
+        const response = await fetch(`/matrices/${id}`);
+        const matrix = await response.json();
+        if (!response.ok) {
+          if (response.status === 404) {
+            localStorage.removeItem('torusMatrixId');
+            appliedMatrixId = null;
+            baseMatrix = [...identityMatrix];
+          }
+          throw new Error(matrix.detail || 'No se pudo consultar la matriz.');
+        }
+        if (!Array.isArray(matrix.datos) || matrix.datos.length !== 4 ||
+            !matrix.datos.every(row => Array.isArray(row) && row.length === 4)) {
+          localStorage.removeItem('torusMatrixId');
+          appliedMatrixId = null;
+          baseMatrix = [...identityMatrix];
+          throw new Error('La matriz seleccionada debe ser de 4 x 4.');
+        }
+        transformGeneration += 1;
+        baseMatrix = Array.from({length: 4}, (_, column) =>
+          Array.from({length: 4}, (_, row) => matrix.datos[row][column])
+        ).flat();
+        appliedMatrixId = String(id);
+        savedMatrixSelect.value = id;
+        localStorage.setItem('torusMatrixId', id);
+        modelGroup.matrix.fromArray(baseMatrix);
+        showStatus(`Matriz ${matrix.nombre} (ID ${matrix.id}) aplicada.`);
+      } catch (error) {
+        showStatus(error.message, true);
+      }
+    }
+
+    document.getElementById('refresh-matrices').addEventListener('click', loadSavedMatrices);
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden) return;
+      const appliedId = appliedMatrixId;
+      await loadSavedMatrices();
+      if (appliedId) await applySavedMatrix(appliedId);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      if (animateToggle.checked && !pendingBaseTransform && !animationRequestPending &&
+          ws && ws.readyState === WebSocket.OPEN && now - lastAnimationSentAt >= 1000 / 30) {
+        angle += 0.8;
+        lastAnimationSentAt = now;
+        animationRequestPending = sendTransform({
+          tx: Math.sin(angle * 0.02) * 0.5,
+          ty: 0,
+          tz: 0,
+          rx: angle,
+          ry: angle * 0.5,
+          rz: 0
+        }, 'animation');
+      }
+      renderer.render(scene, camera);
+    }
+
+    Promise.all([loadModel(), loadSavedMatrices()])
+      .then(async () => {
+        if (lastAppliedMatrixId) await applySavedMatrix(lastAppliedMatrixId);
+      })
+      .catch(error => showStatus(error.message, true));
+    connectWebSocket();
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

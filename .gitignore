@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+# opcional, si no quieres versionar los datos de ejecución:
+# Calculadora de Matrices/database/matrices.json

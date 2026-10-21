@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Visualizador 3D - FastAPI & Three.js</title>
+<style>
+    body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+    #info {
+      position: absolute; top: 10px; left: 10px; color: #fff;
+      background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 8px;
+    }
+</style>
+<!-- Tres.js via CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+ 
+  <div id="info">
+<h3>Visualizador 3D (FastAPI + WebSocket)</h3>
+<p>Estado WebSocket: <span id="ws-status" style="color: orange;">Conectando...</span></p>
+<p>Puntos cargados desde CSV: <strong id="point-count">0</strong></p>
+</div>
+ 
+  <script>
+    // 1. Inicialización de la Escena 3D
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+ 
+    camera.position.set(0, 0, 5);
+ 
+    // Grupo contenedor cuya matriz será controlada por FastAPI
+    const modelGroup = new THREE.Group();
+    modelGroup.matrixAutoUpdate = false; // Importante: deshabilitamos auto-update para usar la matriz de la API
+    scene.add(modelGroup);
+ 
+    // 2. Cargar los puntos del CSV desde FastAPI
+    async function cargarCSV() {
+      try {
+        const response = await fetch('http://localhost:8000/api/modelo-csv');
+        const data = await response.json();
+        document.getElementById('point-count').textContent = data.total_puntos;
+ 
+        if (data.vertices && data.vertices.length > 0) {
+          // Aplanar coordenadas [[x,y,z], ...] -> [x,y,z, x,y,z, ...]
+          const vertices = new Float32Array(data.vertices.flat());
+ 
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+ 
+          // Estilo de la nube de puntos
+          const material = new THREE.PointsMaterial({ color: 0x00ff88, size: 0.08 });
+          const pointCloud = new THREE.Points(geometry, material);
+ 
+          modelGroup.add(pointCloud);
+        }
+      } catch (err) {
+        console.error("Error al cargar el CSV:", err);
+      }
+    }
+ 
+    cargarCSV();
+ 
+    // 3. Conexión WebSocket para enviar parámetros y recibir la Matriz 4x4
+    const ws = new WebSocket('ws://localhost:8000/ws/transform');
+    const statusEl = document.getElementById('ws-status');
+ 
+    ws.onopen = () => {
+      statusEl.textContent = "Conectado";
+      statusEl.style.color = "#00ff88";
+    };
+ 
+    ws.onerror = () => {
+      statusEl.textContent = "Error de conexión";
+      statusEl.style.color = "#ff4444";
+    };
+ 
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.matrix) {
+        // Aplicar la matriz 4x4 calculada por NumPy directamente al objeto 3D
+        modelGroup.matrix.fromArray(data.matrix);
+      }
+    };
+ 
+    // 4. Bucle de Animación y Envío de Parámetros
+    let angle = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+ 
+      // Si el WebSocket está abierto, enviamos ángulos/traslaciones continuas
+      if (ws.readyState === WebSocket.OPEN) {
+        angle += 0.8;
+        ws.send(JSON.stringify({
+          tx: Math.sin(angle * 0.02) * 0.5,
+          ty: 0,
+          tz: 0,
+          rx: angle,
+          ry: angle * 0.5,
+          rz: 0
+        }));
+      }
+ 
+      renderer.render(scene, camera);
+    }
+ 
+    animate();
+ 
+    // Ajustar renderizador al cambiar tamaño de la ventana
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>

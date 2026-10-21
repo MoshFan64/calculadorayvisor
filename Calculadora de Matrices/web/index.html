@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de matrices</title>
+  <style>
+    :root {
+      --ink: #17212b;
+      --muted: #66727c;
+      --paper: #f5f1e9;
+      --panel: #fffdf8;
+      --line: #d9d2c5;
+      --accent: #d95f3f;
+      --accent-dark: #a83e2a;
+      --teal: #2f7775;
+      --shadow: 0 16px 40px rgba(38, 32, 24, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+      background: radial-gradient(circle at 8% 8%, #fce4d5 0, transparent 28%),
+        radial-gradient(circle at 92% 92%, #d9efea 0, transparent 30%), var(--paper);
+    }
+
+    main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 64px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 34px; }
+    .eyebrow { color: var(--accent-dark); font: 700 0.76rem/1.2 Arial, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { max-width: 650px; margin: 8px 0 0; font-size: clamp(2.3rem, 6vw, 4.7rem); line-height: 0.95; letter-spacing: -0.04em; }
+    .intro { max-width: 300px; margin: 0; color: var(--muted); font: 0.98rem/1.5 Arial, sans-serif; }
+    .visualizer-link { padding: 12px 15px; color: white; background: var(--teal); border-radius: 3px; font: 700 0.78rem Arial, sans-serif; letter-spacing: 0.04em; text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+    .visualizer-link:hover { background: var(--ink); }
+    .editors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .panel { background: rgba(255, 253, 248, 0.9); border: 1px solid var(--line); box-shadow: var(--shadow); }
+    .matrix-panel { padding: 24px; }
+    .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+    h2, h3 { margin: 0; }
+    h2 { font-size: 1.8rem; }
+    h3 { font-size: 1.25rem; }
+    .matrix-badge { display: grid; place-items: center; width: 38px; height: 38px; color: white; background: var(--teal); border-radius: 50%; font: 700 1.1rem Arial, sans-serif; }
+    .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; }
+    label { display: grid; gap: 5px; color: var(--muted); font: 700 0.72rem Arial, sans-serif; letter-spacing: 0.07em; text-transform: uppercase; }
+    input, select { width: 100%; min-height: 40px; padding: 8px 10px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 3px; font: 1rem Arial, sans-serif; }
+    .dimension { width: 74px; }
+    button { min-height: 40px; padding: 10px 15px; color: white; background: var(--ink); border: 0; border-radius: 3px; cursor: pointer; font: 700 0.78rem Arial, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; transition: transform 0.16s ease, background 0.16s ease; }
+    button:hover { background: var(--accent-dark); transform: translateY(-1px); }
+    button.secondary { color: var(--ink); background: #ebe5da; }
+    .grid-wrap { overflow-x: auto; padding: 3px; }
+    .matrix-grid { display: grid; gap: 7px; width: max-content; padding: 8px; border-left: 3px solid var(--ink); border-right: 3px solid var(--ink); }
+    .matrix-grid input { width: 62px; min-height: 44px; padding: 6px; text-align: center; font-size: 1.05rem; }
+    .matrix-hint { margin: 12px 0 0; color: var(--muted); font: 0.82rem/1.4 Arial, sans-serif; }
+    .save-line { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+    .status { min-height: 18px; color: var(--muted); font: 0.82rem Arial, sans-serif; }
+    .operations { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; margin-top: 20px; }
+    .operation-panel, .result-panel { padding: 24px; }
+    .operation-panel { border-top: 5px solid var(--accent); }
+    .result-panel { border-top: 5px solid var(--teal); min-height: 220px; }
+    .operation-panel > p { margin: 8px 0 22px; color: var(--muted); font: 0.9rem/1.4 Arial, sans-serif; }
+    .operation-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .operation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .result-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+    #result-content { color: var(--muted); font: 0.95rem/1.5 Arial, sans-serif; }
+    .result-table { border-collapse: separate; border-spacing: 7px; margin: -7px; }
+    .result-table td { min-width: 58px; padding: 10px; color: var(--ink); background: #eef5f2; border: 1px solid #c7ded8; text-align: center; font: 1rem Arial, sans-serif; }
+    .number-result { color: var(--accent-dark); font-size: 2.5rem; font-family: Georgia, serif; }
+    .error { color: var(--accent-dark) !important; }
+    .saved-section { margin-top: 20px; padding: 24px; }
+    .saved-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .saved-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .saved-card { padding: 16px; background: #f8f5ee; border: 1px solid var(--line); }
+    .saved-card header { display: flex; align-items: baseline; margin: 0 0 12px; }
+    .saved-card h4 { margin: 0; font-size: 1.15rem; }
+    .saved-meta { margin-left: auto; color: var(--muted); font: 0.72rem Arial, sans-serif; }
+    .saved-empty { margin: 0; color: var(--muted); font: 0.9rem Arial, sans-serif; }
+    .management-section { display: grid; gap: 16px; margin-top: 20px; padding: 24px; border-top: 5px solid var(--teal); }
+    .management-section > p { margin: -6px 0 2px; color: var(--muted); font: 0.9rem/1.4 Arial, sans-serif; }
+    .management-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+    .management-actions label { width: 120px; }
+    .management-status { min-height: 18px; }
+    @media (max-width: 760px) {
+      main { padding-top: 32px; }
+      header { display: block; }
+      .intro { margin-top: 16px; }
+      .editors, .operations { grid-template-columns: 1fr; }
+      .matrix-panel, .operation-panel, .result-panel { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">Laboratorio de algebra</div>
+        <h1>Calculadora de matrices</h1>
+      </div>
+      <p class="intro">Construye tus matrices celda por celda y explora sus operaciones.</p>
+      <a class="visualizer-link" href="/view">Abrir visualizador 3D</a>
+    </header>
+
+    <section class="editors" aria-label="Editores de matrices">
+      <article class="panel matrix-panel">
+        <div class="panel-heading"><h2>Matriz A</h2><span class="matrix-badge">A</span></div>
+        <div class="controls">
+          <label class="dimension">Filas<input id="rows-a" type="number" min="1" max="8" value="2"></label>
+          <label class="dimension">Columnas<input id="cols-a" type="number" min="1" max="8" value="2"></label>
+          <button class="secondary" type="button" onclick="buildGrid('a')">Actualizar</button>
+          <button class="secondary" type="button" onclick="prepareTransformMatrix('a')">Editar matriz 4x4 para torus</button>
+          <button type="button" onclick="createTransformMatrix('a')">Crear identidad 4x4 para torus</button>
+        </div>
+        <div class="grid-wrap"><div id="grid-a" class="matrix-grid"></div></div>
+        <p class="matrix-hint">Para aplicar esta matriz al torus, debe tener 4 filas y 4 columnas.</p>
+        <div class="save-line"><button type="button" onclick="saveMatrix('a')">Guardar A</button><button type="button" class="secondary" onclick="updateMatrix('a')">Actualizar A</button><span id="status-a" class="status"></span></div>
+      </article>
+
+      <article class="panel matrix-panel">
+        <div class="panel-heading"><h2>Matriz B</h2><span class="matrix-badge">B</span></div>
+        <div class="controls">
+          <label class="dimension">Filas<input id="rows-b" type="number" min="1" max="8" value="2"></label>
+          <label class="dimension">Columnas<input id="cols-b" type="number" min="1" max="8" value="2"></label>
+          <button class="secondary" type="button" onclick="buildGrid('b')">Actualizar</button>
+          <button class="secondary" type="button" onclick="prepareTransformMatrix('b')">Editar matriz 4x4 para torus</button>
+          <button type="button" onclick="createTransformMatrix('b')">Crear identidad 4x4 para torus</button>
+        </div>
+        <div class="grid-wrap"><div id="grid-b" class="matrix-grid"></div></div>
+        <p class="matrix-hint">Para aplicar esta matriz al torus, debe tener 4 filas y 4 columnas.</p>
+        <div class="save-line"><button type="button" onclick="saveMatrix('b')">Guardar B</button><button type="button" class="secondary" onclick="updateMatrix('b')">Actualizar B</button><span id="status-b" class="status"></span></div>
+      </article>
+    </section>
+
+    <section class="operations">
+      <article class="panel operation-panel">
+        <h3>Operaciones</h3>
+        <p>Guarda las matrices para habilitar las operaciones entre ellas.</p>
+        <div class="operation-row">
+          <label>Primera matriz<select id="first-matrix"><option value="a">Matriz A</option><option value="b">Matriz B</option></select></label>
+          <label>Segunda matriz<select id="second-matrix"><option value="b">Matriz B</option><option value="a">Matriz A</option></select></label>
+        </div>
+        <div class="operation-actions">
+          <button type="button" onclick="runBinary('sumar')">Sumar</button>
+          <button type="button" onclick="runBinary('multiplicar')">Multiplicar</button>
+          <button type="button" class="secondary" onclick="runUnary('transpuesta')">Transpuesta</button>
+          <button type="button" class="secondary" onclick="runUnary('determinante')">Determinante</button>
+        </div>
+      </article>
+
+      <article class="panel result-panel">
+        <div class="result-title"><h3>Resultado</h3><span id="operation-label" class="status">Sin operación</span></div>
+        <div id="result-content">El resultado aparecerá aquí.</div>
+      </article>
+    </section>
+
+    <section class="panel saved-section" aria-label="Matrices guardadas">
+      <div class="saved-heading">
+        <div><div class="eyebrow">Historial</div><h3>Matrices guardadas</h3></div>
+        <button type="button" class="secondary" onclick="loadSavedMatrices()">Actualizar lista</button>
+      </div>
+      <div id="saved-matrices" class="saved-grid"><p class="saved-empty">Cargando matrices...</p></div>
+    </section>
+
+    <section class="panel management-section" aria-label="Administrar matrices">
+      <div>
+        <div class="eyebrow">Administracion</div>
+        <h3>Consultar, actualizar o eliminar</h3>
+      </div>
+      <p>Usa el ID mostrado en el historial para trabajar con una matriz especifica.</p>
+      <div class="management-actions">
+        <label>ID de matriz<input id="management-id" type="number" min="1" placeholder="Ej. 1"></label>
+        <button type="button" onclick="consultMatrix()">Consultar</button>
+        <button type="button" class="secondary" onclick="deleteMatrix()">Eliminar</button>
+      </div>
+      <div class="management-actions">
+        <label>Editar desde<select id="update-source"><option value="a">Matriz A</option><option value="b">Matriz B</option></select></label>
+        <button type="button" onclick="updateMatrixFromId()">Actualizar ID con valores del editor</button>
+        <span id="management-status" class="status management-status"></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const savedIds = {a: null, b: null};
+    const api = '';
+
+    function dimension(key, type) {
+      return Math.max(1, Math.min(8, Number(document.getElementById(`${key}-${type}`).value) || 1));
+    }
+
+    function buildGrid(type) {
+      const rows = dimension('rows', type);
+      const cols = dimension('cols', type);
+      document.getElementById(`rows-${type}`).value = rows;
+      document.getElementById(`cols-${type}`).value = cols;
+      const grid = document.getElementById(`grid-${type}`);
+      grid.style.gridTemplateColumns = `repeat(${cols}, 62px)`;
+      grid.innerHTML = '';
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.step = 'any';
+          input.value = row === col ? '1' : '0';
+          input.dataset.row = row;
+          input.dataset.col = col;
+          input.setAttribute('aria-label', `Fila ${row + 1}, columna ${col + 1}`);
+          grid.appendChild(input);
+        }
+      }
+      savedIds[type] = null;
+      document.getElementById(`status-${type}`).textContent = 'Cambios sin guardar';
+    }
+
+    function prepareTransformMatrix(type) {
+      document.getElementById(`rows-${type}`).value = 4;
+      document.getElementById(`cols-${type}`).value = 4;
+      buildGrid(type);
+    }
+
+    async function createTransformMatrix(type) {
+      prepareTransformMatrix(type);
+      await saveMatrix(type);
+    }
+
+    function readMatrix(type) {
+      const rows = dimension('rows', type);
+      const cols = dimension('cols', type);
+      return Array.from({length: rows}, (_, row) => Array.from({length: cols}, (_, col) => {
+        const input = document.querySelector(`#grid-${type} input[data-row="${row}"][data-col="${col}"]`);
+        return Number(input.value);
+      }));
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(`${api}${path}`, options);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'No se pudo completar la operación.');
+      return data;
+    }
+
+    async function saveMatrix(type) {
+      try {
+        const datos = readMatrix(type);
+        const data = await request('/matrices', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({nombre: type.toUpperCase(), datos})
+        });
+        savedIds[type] = data.id;
+        rememberTransformMatrix(data);
+        document.getElementById(`status-${type}`).textContent = `Guardada con ID ${data.id}`;
+        showMessage(`Matriz ${type.toUpperCase()} guardada.`, false);
+        loadSavedMatrices();
+      } catch (error) {
+        showMessage(error.message, true);
+      }
+    }
+
+    async function updateMatrix(type) {
+      if (!savedIds[type]) return showManagementMessage(`Primero guarda la matriz ${type.toUpperCase()} o consulta un ID.`, true);
+      await updateStoredMatrix(savedIds[type], type);
+    }
+
+    async function updateMatrixFromId() {
+      const id = Number(document.getElementById('management-id').value);
+      const type = document.getElementById('update-source').value;
+      if (!id) return showManagementMessage('Escribe un ID valido para actualizar.', true);
+      await updateStoredMatrix(id, type);
+    }
+
+    async function updateStoredMatrix(id, type) {
+      try {
+        const datos = readMatrix(type);
+        const data = await request(`/matrices/${id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({nombre: type.toUpperCase(), datos})
+        });
+        savedIds[type] = data.id;
+        rememberTransformMatrix(data);
+        document.getElementById(`status-${type}`).textContent = `Actualizada con ID ${data.id}`;
+        showManagementMessage(`Matriz ${data.id} actualizada correctamente.`, false);
+        loadSavedMatrices();
+      } catch (error) {
+        showManagementMessage(error.message, true);
+      }
+    }
+
+    function rememberTransformMatrix(matrix) {
+      const isFourByFour = matrix.datos.length === 4 &&
+        matrix.datos.every(row => row.length === 4);
+      if (isFourByFour) localStorage.setItem('torusMatrixId', matrix.id);
+    }
+
+    async function consultMatrix() {
+      const id = Number(document.getElementById('management-id').value);
+      if (!id) return showManagementMessage('Escribe un ID valido para consultar.', true);
+      try {
+        const matrix = await request(`/matrices/${id}`);
+        renderResult(matrix.datos, `${matrix.nombre} · ID ${matrix.id}`);
+        showManagementMessage(`Matriz ${matrix.id} consultada.`, false);
+      } catch (error) {
+        showManagementMessage(error.message, true);
+      }
+    }
+
+    async function deleteMatrix() {
+      const id = Number(document.getElementById('management-id').value);
+      if (!id) return showManagementMessage('Escribe un ID valido para eliminar.', true);
+      try {
+        await request(`/matrices/${id}`, {method: 'DELETE'});
+        Object.keys(savedIds).forEach(type => {
+          if (savedIds[type] === id) savedIds[type] = null;
+        });
+        showManagementMessage(`Matriz ${id} eliminada.`, false);
+        loadSavedMatrices();
+      } catch (error) {
+        showManagementMessage(error.message, true);
+      }
+    }
+
+    function showManagementMessage(message, isError) {
+      const status = document.getElementById('management-status');
+      status.textContent = message;
+      status.className = `status management-status${isError ? ' error' : ''}`;
+    }
+
+    async function loadSavedMatrices() {
+      const container = document.getElementById('saved-matrices');
+      try {
+        const matrices = await request('/matrices');
+        container.replaceChildren();
+        if (!matrices.length) {
+          container.innerHTML = '<p class="saved-empty">Todavia no hay matrices guardadas.</p>';
+          return;
+        }
+        matrices.forEach(matrix => {
+          const card = document.createElement('article');
+          card.className = 'saved-card';
+          const heading = document.createElement('header');
+          const title = document.createElement('h4');
+          title.textContent = matrix.nombre;
+          const meta = document.createElement('span');
+          meta.className = 'saved-meta';
+          meta.textContent = `ID ${matrix.id} · ${matrix.datos.length} x ${matrix.datos[0]?.length || 0}`;
+          heading.append(title, meta);
+          card.appendChild(heading);
+          card.appendChild(createResultTable(matrix.datos));
+          container.appendChild(card);
+        });
+      } catch (error) {
+        container.innerHTML = `<p class="saved-empty error">${error.message}</p>`;
+      }
+    }
+
+    async function runBinary(operation) {
+      const first = document.getElementById('first-matrix').value;
+      const second = document.getElementById('second-matrix').value;
+      if (!savedIds[first] || !savedIds[second]) return showMessage('Guarda las dos matrices antes de continuar.', true);
+      try {
+        const data = await request(`/operaciones/${operation}?id1=${savedIds[first]}&id2=${savedIds[second]}`, {method: 'POST'});
+        renderResult(data.resultado, operation === 'sumar' ? 'Suma' : 'Multiplicación');
+      } catch (error) { showMessage(error.message, true); }
+    }
+
+    async function runUnary(operation) {
+      const type = document.getElementById('first-matrix').value;
+      if (!savedIds[type]) return showMessage(`Guarda la matriz ${type.toUpperCase()} antes de continuar.`, true);
+      try {
+        const data = await request(`/matrices/${savedIds[type]}/${operation}`);
+        renderResult(data.resultado, operation === 'transpuesta' ? 'Transpuesta' : 'Determinante');
+      } catch (error) { showMessage(error.message, true); }
+    }
+
+    function renderResult(result, label) {
+      document.getElementById('operation-label').textContent = label;
+      const content = document.getElementById('result-content');
+      if (Array.isArray(result)) {
+        content.replaceChildren(createResultTable(result));
+      } else {
+        content.innerHTML = `<div class="number-result">${formatNumber(result)}</div>`;
+      }
+    }
+
+    function createResultTable(matrix) {
+      const table = document.createElement('table');
+      table.className = 'result-table';
+      matrix.forEach(row => {
+        const tr = table.insertRow();
+        row.forEach(value => { tr.insertCell().textContent = formatNumber(value); });
+      });
+      return table;
+    }
+
+    function formatNumber(value) {
+      return Number.isInteger(Number(value)) ? Number(value) : Number(value).toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+    }
+
+    function showMessage(message, isError) {
+      const content = document.getElementById('result-content');
+      content.textContent = message;
+      content.className = isError ? 'error' : '';
+      document.getElementById('operation-label').textContent = isError ? 'Aviso' : 'Listo';
+    }
+
+    buildGrid('a');
+    buildGrid('b');
+    loadSavedMatrices();
+  </script>
+</body>
+</html>
