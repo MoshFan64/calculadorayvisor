@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import uvicorn
-from models.models import MatrixCreate
+from models.models import MatrixCreate, TransformRequest
 from repository.repository import MatrixRepository
 import services.services as services
 
@@ -204,6 +204,13 @@ def multiplicar_matrices(id1: int, id2: int):
         return {"resultado": services.multiplicar(m1["datos"], m2["datos"])}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+@app.post("/operaciones/transformar")
+def transformar_matriz(payload: TransformRequest):
+    matrix = create_transformation_matrix(**payload.model_dump(exclude={"base_matrix"}))
+    if payload.base_matrix is not None:
+        matrix = compose_transformation_matrices(matrix, payload.base_matrix)
+    return {"resultado": matrix}
 
 @app.get("/matrices/{id}/transpuesta")
 def transpuesta_matriz(id: int):
