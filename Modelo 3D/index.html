@@ -39,7 +39,7 @@
     // 2. Cargar los puntos del CSV desde FastAPI
     async function cargarCSV() {
       try {
-        const response = await fetch('http://localhost:8000/api/modelo-csv');
+        const response = await fetch('http://localhost:8001/api/modelo-csv');
         const data = await response.json();
         document.getElementById('point-count').textContent = data.total_puntos;
  
@@ -64,7 +64,7 @@
     cargarCSV();
  
     // 3. Conexión WebSocket para enviar parámetros y recibir la Matriz 4x4
-    const ws = new WebSocket('ws://localhost:8000/ws/transform');
+    const ws = new WebSocket('ws://localhost:8001/ws/transform');
     const statusEl = document.getElementById('ws-status');
  
     ws.onopen = () => {

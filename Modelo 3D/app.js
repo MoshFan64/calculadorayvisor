@@ -19,7 +19,7 @@ scene.add(mesh);
 mesh.matrixAutoUpdate = false;
  
 // Conectar con el WebSocket de FastAPI
-const ws = new WebSocket('ws://localhost:8000/ws/transform');
+const ws = new WebSocket('ws://localhost:8001/ws/transform');
  
 ws.onopen = () => {
     console.log('Conectado al servidor de matrices FastAPI');
